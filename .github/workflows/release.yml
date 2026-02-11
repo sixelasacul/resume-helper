@@ -1,0 +1,206 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (do not publish)"
+        required: false
+        default: "true"
+        type: boolean
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  build:
+    name: Build binaries
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Run checks
+        run: bun run check
+
+      - name: Build all platforms
+        run: bun run build:binary
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries
+          path: dist/bin/
+          retention-days: 7
+
+  publish-main:
+    name: Publish main package
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries
+          path: dist/bin/
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --production
+
+      - name: Display package contents
+        run: |
+          echo "Package contents:"
+          ls -la
+          echo ""
+          echo "Bin directory:"
+          ls -la bin/
+          echo ""
+          echo "Dist directory:"
+          ls -la dist/bin/
+
+      - name: Publish (dry run)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        run: npm publish --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish
+        if: ${{ github.event.inputs.dry_run != 'true' && startsWith(github.ref, 'refs/tags/v') }}
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-platform-packages:
+    name: Publish platform package
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - darwin-arm64
+          - darwin-x64
+          - linux-x64
+          - linux-arm64
+          - windows-x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries
+          path: dist/bin/
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Get version
+        id: version
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Create platform package
+        run: |
+          PLATFORM="${{ matrix.platform }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          PKG_DIR="platform-packages/@resume-helper/${PLATFORM}"
+
+          mkdir -p "${PKG_DIR}/bin"
+
+          # Determine binary extension
+          if [[ "$PLATFORM" == "windows-x64" ]]; then
+            BINARY="resume-cli-${PLATFORM}.exe"
+          else
+            BINARY="resume-cli-${PLATFORM}"
+          fi
+
+          # Copy binary
+          cp "dist/bin/${BINARY}" "${PKG_DIR}/bin/${BINARY}"
+          chmod +x "${PKG_DIR}/bin/${BINARY}"
+
+          # Create package.json
+          cat > "${PKG_DIR}/package.json" << EOF
+          {
+            "name": "@resume-helper/${PLATFORM}",
+            "version": "${VERSION}",
+            "description": "Platform-specific binary for resume-helper (${PLATFORM})",
+            "license": "MIT",
+            "repository": {
+              "type": "git",
+              "url": "https://github.com/sixelasacul/resume-helper.git"
+            },
+            "os": ["$(echo $PLATFORM | cut -d'-' -f1 | sed 's/darwin/darwin/' | sed 's/linux/linux/' | sed 's/windows/win32/')"],
+            "cpu": ["$(echo $PLATFORM | cut -d'-' -f2)"],
+            "files": ["bin"]
+          }
+          EOF
+
+          echo "Created package for ${PLATFORM}:"
+          cat "${PKG_DIR}/package.json"
+          ls -la "${PKG_DIR}/bin/"
+
+      - name: Publish platform package (dry run)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        working-directory: platform-packages/@resume-helper/${{ matrix.platform }}
+        run: npm publish --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish platform package
+        if: ${{ github.event.inputs.dry_run != 'true' && startsWith(github.ref, 'refs/tags/v') }}
+        working-directory: platform-packages/@resume-helper/${{ matrix.platform }}
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  create-release:
+    name: Create GitHub Release
+    needs: [publish-main, publish-platform-packages]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: binaries
+          path: dist/bin/
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/bin/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, '-') }}

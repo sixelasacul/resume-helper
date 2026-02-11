@@ -1,0 +1,73 @@
+{
+  "name": "resume-helper",
+  "version": "0.1.0",
+  "description": "CLI tool to generate resumes from git commits, GitHub PRs, and Slack messages",
+  "license": "MIT",
+  "author": "Alexis Lucas",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sixelasacul/resume-helper.git"
+  },
+  "keywords": [
+    "resume",
+    "cv",
+    "git",
+    "github",
+    "slack",
+    "cli",
+    "ai",
+    "career"
+  ],
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "src/index.ts",
+  "bin": {
+    "resume-cli": "./bin/cli.mjs"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "scripts/postinstall.mjs"
+  ],
+  "scripts": {
+    "build": "bun build src/index.ts --target=node --outdir=dist --format=esm",
+    "build:binary": "bun run scripts/build.ts",
+    "build:binary:current": "bun run scripts/build.ts --current",
+    "dev": "bun run src/index.ts",
+    "start": "node dist/index.js",
+    "postinstall": "node scripts/postinstall.mjs",
+    "type-check": "tsc --noEmit",
+    "lint": "oxlint src/",
+    "lint:fix": "oxlint src/ --fix",
+    "format": "oxfmt src/",
+    "format:check": "oxfmt --check src/",
+    "check": "bun run lint && bun run format:check && bun run type-check",
+    "prepublishOnly": "bun run check && bun run build:binary"
+  },
+  "optionalDependencies": {
+    "@resume-helper/darwin-arm64": "0.1.0",
+    "@resume-helper/darwin-x64": "0.1.0",
+    "@resume-helper/linux-x64": "0.1.0",
+    "@resume-helper/linux-arm64": "0.1.0",
+    "@resume-helper/windows-x64": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "oxfmt": "^0.28.0",
+    "oxlint": "^1.43.0"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.0.0",
+    "@octokit/rest": "^22.0.1",
+    "@tanstack/ai": "^0.3.0",
+    "chalk": "^5.6.2",
+    "commander": "^14.0.3",
+    "linguist-languages": "^9.3.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
