@@ -12,9 +12,7 @@ const program = new Command();
 
 program
   .name("resume-cli")
-  .description(
-    "Generate professional resumes from git commits, GitHub PRs, and Slack messages",
-  )
+  .description("Generate professional resumes from git commits, GitHub PRs, and Slack messages")
   .version(version);
 
 // Main command: generate
@@ -26,14 +24,8 @@ program
   .option("-e, --end-date <date>", "End date (YYYY-MM-DD)")
   .option("-o, --output <file>", "Output file path", "resume.md")
   .option("--template <file>", "Path to resume template example")
-  .option(
-    "--with-ai",
-    "Generate content using AI (requires configured AI provider)",
-  )
-  .option(
-    "--export-prompt",
-    "Export prompt for manual AI use (default behavior)",
-  )
+  .option("--with-ai", "Generate content using AI (requires configured AI provider)")
+  .option("--export-prompt", "Export prompt for manual AI use (default behavior)")
   .option("--reset", "Reset configuration and prompt for all settings")
   .action(async (options) => {
     intro(chalk.blue("Resume CLI"));
@@ -44,15 +36,10 @@ program
 // Helper command: slack-prompt
 program
   .command("slack-prompt")
-  .description(
-    "Generate a prompt template for Slack AI to extract professional contributions",
-  )
+  .description("Generate a prompt template for Slack AI to extract professional contributions")
   .option("-s, --start-date <date>", "Start date (YYYY-MM-DD)")
   .option("-e, --end-date <date>", "End date (YYYY-MM-DD)")
-  .option(
-    "-c, --channels <channels>",
-    "Comma-separated list of channels to focus on",
-  )
+  .option("-c, --channels <channels>", "Comma-separated list of channels to focus on")
   .action(async (options) => {
     await slackPromptCommand(options);
   });
@@ -62,10 +49,7 @@ program
   .command("config")
   .description("View and manage configuration")
   .option("--set <key=value...>", "Set configuration values")
-  .option(
-    "--unset <key...>",
-    "Unset configuration values (will prompt on next generate)",
-  )
+  .option("--unset <key...>", "Unset configuration values (will prompt on next generate)")
   .action(async (options) => {
     await configCommand(options);
   });
@@ -76,10 +60,7 @@ program.configureOutput({
 });
 
 program.exitOverride((err) => {
-  if (
-    err.code === "commander.helpDisplayed" ||
-    err.code === "commander.version"
-  ) {
+  if (err.code === "commander.helpDisplayed" || err.code === "commander.version") {
     process.exit(0);
   }
   if (err.code === "commander.unknownCommand") {
