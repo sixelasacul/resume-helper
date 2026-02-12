@@ -41,8 +41,7 @@
     "lint:fix": "oxlint src/ --fix",
     "format": "oxfmt src/",
     "format:check": "oxfmt --check src/",
-    "check": "bun run lint && bun run format:check && bun run type-check",
-    "prepublishOnly": "bun run check && bun run build:binary"
+    "check": "bun run lint && bun run format:check && bun run type-check"
   },
   "optionalDependencies": {
     "resume-helper-darwin-arm64": "0.1.0",

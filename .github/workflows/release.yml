@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   build:
-    name: Build binaries
+    name: Build all packages
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -35,7 +35,10 @@ jobs:
       - name: Run checks
         run: bun run check
 
-      - name: Build all platforms
+      - name: Build JS bundle
+        run: bun run build
+
+      - name: Build platform binaries
         run: bun run build:binary
 
       - name: Display build output
@@ -46,7 +49,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: platform-packages
+          name: dist
           path: dist/
           retention-days: 7
 
@@ -66,7 +69,7 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: platform-packages
+          name: dist
           path: dist/
 
       - name: Setup Node
@@ -111,22 +114,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           registry-url: "https://registry.npmjs.org"
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --production --ignore-scripts
-
-      - name: Build JS bundle
-        run: bun run build
 
       - name: Display package contents
         run: |
@@ -141,13 +139,13 @@ jobs:
 
       - name: Publish (dry run)
         if: ${{ github.event.inputs.dry_run == 'true' }}
-        run: npm publish --dry-run
+        run: npm publish --dry-run --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish
         if: ${{ github.event.inputs.dry_run != 'true' && startsWith(github.ref, 'refs/tags/v') }}
-        run: npm publish --provenance --access public
+        run: npm publish --provenance --access public --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -163,7 +161,7 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: platform-packages
+          name: dist
           path: dist/
 
       - name: Prepare release assets
