@@ -1,16 +1,8 @@
 import { writeFile } from "fs/promises";
 import chalk from "chalk";
-import {
-  loadResumeConfig,
-  configExists,
-  getDefaultConfig,
-} from "../utils/config.js";
+import { loadResumeConfig, configExists, getDefaultConfig } from "../utils/config.js";
 import { AIService, type ResumePromptData } from "../services/ai.js";
-import {
-  initializePlugins,
-  pluginManager,
-  type PluginContentSection,
-} from "../plugins/index.js";
+import { initializePlugins, pluginManager, type PluginContentSection } from "../plugins/index.js";
 
 interface GenerateOptions {
   company?: string;

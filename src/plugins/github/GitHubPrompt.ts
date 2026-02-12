@@ -34,8 +34,7 @@ export class GitHubPrompt implements PluginPrompt<"github", ["git"]> {
     options?: PromptConfigOptions,
   ): Promise<ResumeConfig> {
     const currentValue = config.githubToken;
-    const hasExistingToken =
-      currentValue !== "$pending" && currentValue !== "$declined";
+    const hasExistingToken = currentValue !== "$pending" && currentValue !== "$declined";
 
     // If not resetting, skip if already handled (set or declined)
     if (!options?.reset && currentValue !== "$pending") {
@@ -58,9 +57,7 @@ export class GitHubPrompt implements PluginPrompt<"github", ["git"]> {
       }
     }
 
-    console.log(
-      chalk.dim("\nGitHub integration (optional - for pull request data):"),
-    );
+    console.log(chalk.dim("\nGitHub integration (optional - for pull request data):"));
 
     const token = await p.text({
       message: "GitHub personal access token (leave empty to skip)",
@@ -84,10 +81,7 @@ export class GitHubPrompt implements PluginPrompt<"github", ["git"]> {
    */
   canRun(config: ResumeConfig, deps: DepsFor<["git"]>): boolean {
     // Need actual token value (not pending/declined)
-    if (
-      config.githubToken === "$pending" ||
-      config.githubToken === "$declined"
-    ) {
+    if (config.githubToken === "$pending" || config.githubToken === "$declined") {
       return false;
     }
 
@@ -148,10 +142,7 @@ export class GitHubPrompt implements PluginPrompt<"github", ["git"]> {
     const uniquePRs = allPRs.filter(
       (pr, index, arr) =>
         index ===
-        arr.findIndex(
-          (p) =>
-            p.number === pr.number && p.repositoryName === pr.repositoryName,
-        ),
+        arr.findIndex((p) => p.number === pr.number && p.repositoryName === pr.repositoryName),
     );
 
     // Limit PRs
@@ -181,10 +172,7 @@ export class GitHubPrompt implements PluginPrompt<"github", ["git"]> {
   /**
    * Fetch PRs for a repository
    */
-  private async fetchPRsForRepo(
-    service: GitHubService,
-    repo: GitRepository,
-  ): Promise<GitHubPR[]> {
+  private async fetchPRsForRepo(service: GitHubService, repo: GitRepository): Promise<GitHubPR[]> {
     if (!repo.githubUrl) {
       return [];
     }
@@ -235,10 +223,7 @@ export class GitHubPrompt implements PluginPrompt<"github", ["git"]> {
   private extractHost(url?: string): string | null {
     if (!url) return null;
 
-    const patterns = [
-      /https:\/\/([^\/]+)\//,
-      /git@([^:]+):/,
-    ];
+    const patterns = [/https:\/\/([^\/]+)\//, /git@([^:]+):/];
 
     for (const pattern of patterns) {
       const match = url.match(pattern);

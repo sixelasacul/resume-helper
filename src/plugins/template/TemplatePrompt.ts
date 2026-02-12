@@ -43,9 +43,7 @@ export class TemplatePrompt implements PluginPrompt<"template", never[]> {
         return config; // File exists, use it
       }
       // File doesn't exist anymore, need to re-prompt
-      console.log(
-        chalk.yellow(`\nTemplate file no longer exists: ${config.templatePath}`),
-      );
+      console.log(chalk.yellow(`\nTemplate file no longer exists: ${config.templatePath}`));
     }
 
     // Skip if either was declined and not resetting

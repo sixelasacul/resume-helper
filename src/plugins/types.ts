@@ -146,10 +146,7 @@ export interface PluginPrompt<
    * @param deps Outputs from dependencies (type-safe based on `needs`)
    * @returns Result with sections and typed output, or null if generation failed
    */
-  generateContent(
-    config: ResumeConfig,
-    deps: DepsFor<TNeeds>,
-  ): Promise<PluginResult<TId> | null>;
+  generateContent(config: ResumeConfig, deps: DepsFor<TNeeds>): Promise<PluginResult<TId> | null>;
 }
 
 /**

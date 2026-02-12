@@ -110,9 +110,7 @@ export class GitPrompt implements PluginPrompt<"git", never[]> {
         console.log(chalk.dim(`Current emails: ${updatedConfig.authorEmails.join(", ")}`));
       }
 
-      const emails = await this.promptForEmails(
-        options?.reset ? updatedConfig.authorEmails : [],
-      );
+      const emails = await this.promptForEmails(options?.reset ? updatedConfig.authorEmails : []);
       updatedConfig.authorEmails = emails;
     }
 
@@ -164,7 +162,9 @@ export class GitPrompt implements PluginPrompt<"git", never[]> {
         repositories.push(repo);
       } catch (error) {
         console.warn(
-          chalk.yellow(`  Warning: Could not analyze ${repoPath}: ${error instanceof Error ? error.message : "Unknown error"}`),
+          chalk.yellow(
+            `  Warning: Could not analyze ${repoPath}: ${error instanceof Error ? error.message : "Unknown error"}`,
+          ),
         );
       }
     }
@@ -214,7 +214,10 @@ export class GitPrompt implements PluginPrompt<"git", never[]> {
 
     while (true) {
       const repoPath = await p.text({
-        message: repos.length === 0 ? "Repository path" : "Add another repository (or leave empty to continue)",
+        message:
+          repos.length === 0
+            ? "Repository path"
+            : "Add another repository (or leave empty to continue)",
         placeholder: "/path/to/repo",
         validate: (value) => {
           const v = value || "";
@@ -259,7 +262,8 @@ export class GitPrompt implements PluginPrompt<"git", never[]> {
 
     while (true) {
       const email = await p.text({
-        message: emails.length === 0 ? "Author email" : "Add another email (or leave empty to continue)",
+        message:
+          emails.length === 0 ? "Author email" : "Add another email (or leave empty to continue)",
         placeholder: "you@example.com",
         initialValue: emails.length === 0 ? gitEmail || "" : "",
         validate: (value) => {
@@ -319,7 +323,18 @@ export class GitPrompt implements PluginPrompt<"git", never[]> {
   /**
    * Format commits into markdown content
    */
-  private formatCommitsSection(repositories: { name: string; commits: Array<{ hash: string; date: string; message: string; stats: { additions: number; deletions: number; total: number }; files: Array<{ path: string }> }> }[]): string {
+  private formatCommitsSection(
+    repositories: {
+      name: string;
+      commits: Array<{
+        hash: string;
+        date: string;
+        message: string;
+        stats: { additions: number; deletions: number; total: number };
+        files: Array<{ path: string }>;
+      }>;
+    }[],
+  ): string {
     const lines: string[] = [];
 
     lines.push("## Code Contributions");
@@ -360,7 +375,12 @@ export class GitPrompt implements PluginPrompt<"git", never[]> {
   /**
    * Format technologies into markdown content
    */
-  private async formatTechnologiesSection(repositories: { path: string; commits: Array<{ files: Array<{ path: string; additions: number; deletions: number }> }> }[]): Promise<string> {
+  private async formatTechnologiesSection(
+    repositories: {
+      path: string;
+      commits: Array<{ files: Array<{ path: string; additions: number; deletions: number }> }>;
+    }[],
+  ): Promise<string> {
     const lines: string[] = [];
     const allTechs: TechnologyMention[] = [];
 
@@ -392,7 +412,15 @@ export class GitPrompt implements PluginPrompt<"git", never[]> {
       byCategory.set(tech.category, list);
     }
 
-    const categoryOrder = ["language", "framework", "library", "database", "cloud", "infrastructure", "tool"];
+    const categoryOrder = [
+      "language",
+      "framework",
+      "library",
+      "database",
+      "cloud",
+      "infrastructure",
+      "tool",
+    ];
     for (const category of categoryOrder) {
       const techs = byCategory.get(category);
       if (techs && techs.length > 0) {

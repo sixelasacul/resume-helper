@@ -1,11 +1,7 @@
 /**
  * Build the Slack AI prompt template for extracting professional contributions.
  */
-export function buildSlackAIPrompt(
-  startDate: string,
-  endDate: string,
-  channels: string,
-): string {
+export function buildSlackAIPrompt(startDate: string, endDate: string, channels: string): string {
   const channelInstruction = channels
     ? `Focus specifically on these channels: ${channels}`
     : "Search across all channels I have access to.";

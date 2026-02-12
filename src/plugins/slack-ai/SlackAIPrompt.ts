@@ -47,9 +47,7 @@ export class SlackAIPrompt implements PluginPrompt<"slack-ai", never[]> {
         return config; // File exists, use it
       }
       // File doesn't exist anymore, need to re-prompt
-      console.log(
-        chalk.yellow(`\nSlack AI file no longer exists: ${config.slackAiFilePath}`),
-      );
+      console.log(chalk.yellow(`\nSlack AI file no longer exists: ${config.slackAiFilePath}`));
     }
 
     // Skip if either was declined and not resetting
