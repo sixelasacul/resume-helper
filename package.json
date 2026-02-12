@@ -22,7 +22,7 @@
   "main": "dist/index.js",
   "module": "src/index.ts",
   "bin": {
-    "resume-cli": "./bin/cli.mjs"
+    "resume-helper": "./bin/resume-helper.cjs"
   },
   "files": [
     "bin",
@@ -45,11 +45,11 @@
     "prepublishOnly": "bun run check && bun run build:binary"
   },
   "optionalDependencies": {
-    "@resume-helper/darwin-arm64": "0.1.0",
-    "@resume-helper/darwin-x64": "0.1.0",
-    "@resume-helper/linux-x64": "0.1.0",
-    "@resume-helper/linux-arm64": "0.1.0",
-    "@resume-helper/windows-x64": "0.1.0"
+    "resume-helper-darwin-arm64": "0.1.0",
+    "resume-helper-darwin-x64": "0.1.0",
+    "resume-helper-linux-x64": "0.1.0",
+    "resume-helper-linux-arm64": "0.1.0",
+    "resume-helper-windows-x64": "0.1.0"
   },
   "devDependencies": {
     "@types/bun": "latest",

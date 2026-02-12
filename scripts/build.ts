@@ -3,7 +3,9 @@
  * Build script for cross-compiling resume-helper CLI
  *
  * Produces standalone binaries for multiple platforms that don't require
- * Bun or Node.js to be installed.
+ * Bun or Node.js to be installed. Uses Bun.build() API for compilation
+ * and generates platform-specific npm packages with proper os/cpu fields
+ * for npm's optional dependency resolution.
  *
  * Usage:
  *   bun run scripts/build.ts              # Build all platforms
@@ -11,61 +13,99 @@
  *   bun run scripts/build.ts --platform darwin-arm64  # Build specific platform
  */
 
-import { $ } from "bun";
-import { mkdir, rm, copyFile, readdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
 import { join } from "node:path";
+
+// Package info
+const pkg = await Bun.file("package.json").json();
+const PKG_NAME = "resume-helper";
+const VERSION = pkg.version;
 
 // Supported platforms for Bun's cross-compilation
 const PLATFORMS = [
-  "darwin-arm64",
-  "darwin-x64",
-  "linux-x64",
-  "linux-arm64",
-  "windows-x64",
+  { os: "darwin", arch: "arm64" },
+  { os: "darwin", arch: "x64" },
+  { os: "linux", arch: "x64" },
+  { os: "linux", arch: "arm64" },
+  { os: "windows", arch: "x64" },
 ] as const;
 
 type Platform = (typeof PLATFORMS)[number];
 
-interface BuildOptions {
-  platforms: Platform[];
-  outputDir: string;
-  entrypoint: string;
-  name: string;
+interface BuildResult {
+  platform: Platform;
+  packageName: string;
+  success: boolean;
+  size?: number;
+  error?: string;
 }
 
-function getPlatformBinaryName(name: string, platform: Platform): string {
-  const ext = platform.startsWith("windows") ? ".exe" : "";
-  return `${name}-${platform}${ext}`;
+function getPlatformKey(platform: Platform): string {
+  return `${platform.os}-${platform.arch}`;
+}
+
+function getPackageName(platform: Platform): string {
+  return `${PKG_NAME}-${getPlatformKey(platform)}`;
+}
+
+function getBunTarget(platform: Platform): string {
+  // Map our platform names to Bun's target format
+  return `bun-${platform.os}-${platform.arch}`;
+}
+
+function getBinaryName(platform: Platform): string {
+  return platform.os === "windows" ? `${PKG_NAME}.exe` : PKG_NAME;
+}
+
+function getNpmOs(platform: Platform): string {
+  // npm uses "darwin" for macOS, "linux" for Linux, "win32" for Windows
+  return platform.os === "windows" ? "win32" : platform.os;
 }
 
 function getCurrentPlatform(): Platform {
   const arch = process.arch === "arm64" ? "arm64" : "x64";
-  const os = process.platform === "win32" ? "windows" : process.platform;
-  return `${os}-${arch}` as Platform;
+  const os =
+    process.platform === "win32"
+      ? "windows"
+      : (process.platform as "darwin" | "linux");
+  return { os, arch } as Platform;
 }
 
-async function buildForPlatform(
-  platform: Platform,
-  options: BuildOptions,
-): Promise<{ success: boolean; size?: number; error?: string }> {
-  const binaryName = getPlatformBinaryName(options.name, platform);
-  const outputPath = join(options.outputDir, binaryName);
+async function buildForPlatform(platform: Platform): Promise<BuildResult> {
+  const packageName = getPackageName(platform);
+  const binaryName = getBinaryName(platform);
+  const bunTarget = getBunTarget(platform);
+  const outputDir = join("dist", packageName, "bin");
+  const outputPath = join(outputDir, binaryName);
 
-  console.log(`  Building for ${platform}...`);
+  console.log(`  Building ${packageName}...`);
 
   try {
-    // Bun compile with cross-compilation target
-    const result =
-      await $`bun build ${options.entrypoint} --compile --target=bun-${platform} --outfile=${outputPath}`
-        .quiet()
-        .nothrow();
+    // Ensure output directory exists
+    await mkdir(outputDir, { recursive: true });
 
-    if (result.exitCode !== 0) {
-      const stderr = result.stderr.toString().trim();
-      const stdout = result.stdout.toString().trim();
+    // Build using Bun.build() API with compile option
+    // See: https://bun.sh/docs/bundler/executables
+    const result = await Bun.build({
+      entrypoints: ["./src/index.ts"],
+      compile: {
+        target: bunTarget as Bun.Build.CompileTarget,
+        outfile: outputPath,
+      },
+      minify: true,
+      bytecode: true,
+    });
+
+    if (!result.success) {
+      const errors = result.logs
+        .filter((log) => log.level === "error")
+        .map((log) => log.message)
+        .join("\n");
       return {
+        platform,
+        packageName,
         success: false,
-        error: stderr || stdout || `Exit code ${result.exitCode}`,
+        error: errors || "Build failed with unknown error",
       };
     }
 
@@ -73,9 +113,30 @@ async function buildForPlatform(
     const file = Bun.file(outputPath);
     const size = file.size;
 
-    return { success: true, size };
+    // Generate platform package.json
+    const platformPkgJson = {
+      name: packageName,
+      version: VERSION,
+      description: `Platform-specific binary for resume-helper (${getPlatformKey(platform)})`,
+      license: "MIT",
+      repository: {
+        type: "git",
+        url: "https://github.com/sixelasacul/resume-helper.git",
+      },
+      os: [getNpmOs(platform)],
+      cpu: [platform.arch],
+    };
+
+    await Bun.write(
+      join("dist", packageName, "package.json"),
+      JSON.stringify(platformPkgJson, null, 2),
+    );
+
+    return { platform, packageName, success: true, size };
   } catch (error) {
     return {
+      platform,
+      packageName,
       success: false,
       error: error instanceof Error ? error.message : String(error),
     };
@@ -98,45 +159,51 @@ async function main() {
     selectedPlatforms = [getCurrentPlatform()];
   } else if (args.includes("--platform")) {
     const platformIndex = args.indexOf("--platform");
-    const platform = args[platformIndex + 1] as Platform;
-    if (!PLATFORMS.includes(platform)) {
-      console.error(`Invalid platform: ${platform}`);
-      console.error(`Valid platforms: ${PLATFORMS.join(", ")}`);
+    const platformArg = args[platformIndex + 1];
+    if (!platformArg) {
+      console.error("Missing platform argument");
+      console.error(
+        `Valid platforms: ${PLATFORMS.map((p) => getPlatformKey(p)).join(", ")}`,
+      );
+      process.exit(1);
+    }
+    const [os, arch] = platformArg.split("-") as [
+      Platform["os"],
+      Platform["arch"],
+    ];
+    const platform = PLATFORMS.find((p) => p.os === os && p.arch === arch);
+    if (!platform) {
+      console.error(`Invalid platform: ${platformArg}`);
+      console.error(
+        `Valid platforms: ${PLATFORMS.map((p) => getPlatformKey(p)).join(", ")}`,
+      );
       process.exit(1);
     }
     selectedPlatforms = [platform];
   }
 
-  const options: BuildOptions = {
-    platforms: selectedPlatforms,
-    outputDir: "dist/bin",
-    entrypoint: "src/index.ts",
-    name: "resume-cli",
-  };
+  console.log(`Building ${PKG_NAME} CLI v${VERSION}...\n`);
+  console.log(
+    `Platforms: ${selectedPlatforms.map((p) => getPlatformKey(p)).join(", ")}`,
+  );
+  console.log(`Output: dist/<platform-package>/\n`);
 
-  console.log("Building resume-helper CLI...\n");
-  console.log(`Platforms: ${options.platforms.join(", ")}`);
-  console.log(`Output: ${options.outputDir}\n`);
-
-  // Clean and create output directory
-  try {
-    await rm(options.outputDir, { recursive: true, force: true });
-  } catch {
-    // Ignore if doesn't exist
+  // Clean dist directory for selected platforms
+  for (const platform of selectedPlatforms) {
+    const packageName = getPackageName(platform);
+    try {
+      await rm(join("dist", packageName), { recursive: true, force: true });
+    } catch {
+      // Ignore if doesn't exist
+    }
   }
-  await mkdir(options.outputDir, { recursive: true });
 
   // Build for each platform
-  const results: {
-    platform: Platform;
-    success: boolean;
-    size?: number;
-    error?: string;
-  }[] = [];
+  const results: BuildResult[] = [];
 
-  for (const platform of options.platforms) {
-    const result = await buildForPlatform(platform, options);
-    results.push({ platform, ...result });
+  for (const platform of selectedPlatforms) {
+    const result = await buildForPlatform(platform);
+    results.push(result);
 
     if (result.success) {
       console.log(`    Done (${formatSize(result.size!)})`);
@@ -154,24 +221,27 @@ async function main() {
 
   if (successful.length > 0) {
     console.log(`\nSuccessful builds (${successful.length}):`);
-    for (const { platform, size } of successful) {
-      const binaryName = getPlatformBinaryName(options.name, platform);
-      console.log(`  ${binaryName} (${formatSize(size!)})`);
+    for (const { packageName, size } of successful) {
+      console.log(`  ${packageName} (${formatSize(size!)})`);
     }
   }
 
   if (failed.length > 0) {
     console.log(`\nFailed builds (${failed.length}):`);
-    for (const { platform, error } of failed) {
-      console.log(`  ${platform}: ${error}`);
+    for (const { packageName, error } of failed) {
+      console.log(`  ${packageName}: ${error}`);
     }
   }
 
-  // List output files
-  console.log(`\nOutput directory: ${options.outputDir}`);
-  const files = await readdir(options.outputDir);
-  for (const file of files) {
-    console.log(`  ${file}`);
+  // List output structure
+  console.log("\nOutput structure:");
+  for (const { packageName } of successful) {
+    console.log(`  dist/${packageName}/`);
+    console.log(`    ├── bin/`);
+    console.log(
+      `    │   └── resume-helper${packageName.includes("windows") ? ".exe" : ""}`,
+    );
+    console.log(`    └── package.json`);
   }
 
   // Exit with error if any builds failed

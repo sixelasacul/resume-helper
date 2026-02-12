@@ -38,26 +38,78 @@ jobs:
       - name: Build all platforms
         run: bun run build:binary
 
+      - name: Display build output
+        run: |
+          echo "Build output structure:"
+          find dist -type f | head -50
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: binaries
-          path: dist/bin/
+          name: platform-packages
+          path: dist/
           retention-days: 7
+
+  publish-platform-packages:
+    name: Publish platform packages
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - resume-helper-darwin-arm64
+          - resume-helper-darwin-x64
+          - resume-helper-linux-x64
+          - resume-helper-linux-arm64
+          - resume-helper-windows-x64
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: platform-packages
+          path: dist/
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Display package contents
+        run: |
+          echo "Package: ${{ matrix.platform }}"
+          ls -la dist/${{ matrix.platform }}/
+          echo ""
+          echo "Binary:"
+          ls -la dist/${{ matrix.platform }}/bin/
+          echo ""
+          echo "package.json:"
+          cat dist/${{ matrix.platform }}/package.json
+
+      - name: Set executable permissions
+        run: chmod -R 755 dist/${{ matrix.platform }}/bin/
+
+      - name: Publish platform package (dry run)
+        if: ${{ github.event.inputs.dry_run == 'true' }}
+        working-directory: dist/${{ matrix.platform }}
+        run: npm publish --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish platform package
+        if: ${{ github.event.inputs.dry_run != 'true' && startsWith(github.ref, 'refs/tags/v') }}
+        working-directory: dist/${{ matrix.platform }}
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   publish-main:
     name: Publish main package
-    needs: build
+    needs: publish-platform-packages
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: binaries
-          path: dist/bin/
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -71,18 +123,21 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install --production
+        run: bun install --production --ignore-scripts
+
+      - name: Build JS bundle
+        run: bun run build
 
       - name: Display package contents
         run: |
-          echo "Package contents:"
+          echo "Package files:"
           ls -la
           echo ""
           echo "Bin directory:"
           ls -la bin/
           echo ""
           echo "Dist directory:"
-          ls -la dist/bin/
+          ls -la dist/
 
       - name: Publish (dry run)
         if: ${{ github.event.inputs.dry_run == 'true' }}
@@ -92,92 +147,6 @@ jobs:
 
       - name: Publish
         if: ${{ github.event.inputs.dry_run != 'true' && startsWith(github.ref, 'refs/tags/v') }}
-        run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-  publish-platform-packages:
-    name: Publish platform package
-    needs: build
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        platform:
-          - darwin-arm64
-          - darwin-x64
-          - linux-x64
-          - linux-arm64
-          - windows-x64
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: binaries
-          path: dist/bin/
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          registry-url: "https://registry.npmjs.org"
-
-      - name: Get version
-        id: version
-        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
-
-      - name: Create platform package
-        run: |
-          PLATFORM="${{ matrix.platform }}"
-          VERSION="${{ steps.version.outputs.version }}"
-          PKG_DIR="platform-packages/@resume-helper/${PLATFORM}"
-
-          mkdir -p "${PKG_DIR}/bin"
-
-          # Determine binary extension
-          if [[ "$PLATFORM" == "windows-x64" ]]; then
-            BINARY="resume-cli-${PLATFORM}.exe"
-          else
-            BINARY="resume-cli-${PLATFORM}"
-          fi
-
-          # Copy binary
-          cp "dist/bin/${BINARY}" "${PKG_DIR}/bin/${BINARY}"
-          chmod +x "${PKG_DIR}/bin/${BINARY}"
-
-          # Create package.json
-          cat > "${PKG_DIR}/package.json" << EOF
-          {
-            "name": "@resume-helper/${PLATFORM}",
-            "version": "${VERSION}",
-            "description": "Platform-specific binary for resume-helper (${PLATFORM})",
-            "license": "MIT",
-            "repository": {
-              "type": "git",
-              "url": "https://github.com/sixelasacul/resume-helper.git"
-            },
-            "os": ["$(echo $PLATFORM | cut -d'-' -f1 | sed 's/darwin/darwin/' | sed 's/linux/linux/' | sed 's/windows/win32/')"],
-            "cpu": ["$(echo $PLATFORM | cut -d'-' -f2)"],
-            "files": ["bin"]
-          }
-          EOF
-
-          echo "Created package for ${PLATFORM}:"
-          cat "${PKG_DIR}/package.json"
-          ls -la "${PKG_DIR}/bin/"
-
-      - name: Publish platform package (dry run)
-        if: ${{ github.event.inputs.dry_run == 'true' }}
-        working-directory: platform-packages/@resume-helper/${{ matrix.platform }}
-        run: npm publish --dry-run
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Publish platform package
-        if: ${{ github.event.inputs.dry_run != 'true' && startsWith(github.ref, 'refs/tags/v') }}
-        working-directory: platform-packages/@resume-helper/${{ matrix.platform }}
         run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -194,13 +163,32 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          name: binaries
-          path: dist/bin/
+          name: platform-packages
+          path: dist/
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          
+          # Copy binaries with descriptive names for GitHub release
+          for platform in darwin-arm64 darwin-x64 linux-x64 linux-arm64 windows-x64; do
+            pkg_dir="dist/resume-helper-${platform}"
+            if [ -d "$pkg_dir/bin" ]; then
+              if [ "$platform" = "windows-x64" ]; then
+                cp "$pkg_dir/bin/resume-helper.exe" "release-assets/resume-helper-${platform}.exe"
+              else
+                cp "$pkg_dir/bin/resume-helper" "release-assets/resume-helper-${platform}"
+              fi
+            fi
+          done
+          
+          echo "Release assets:"
+          ls -la release-assets/
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/bin/*
+          files: release-assets/*
           generate_release_notes: true
           draft: false
           prerelease: ${{ contains(github.ref, '-') }}

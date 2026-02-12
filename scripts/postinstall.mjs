@@ -2,163 +2,96 @@
 /**
  * Postinstall script for resume-helper
  *
- * This script is called after npm install to set up the correct binary
- * for the current platform. It tries to:
- * 1. Find the platform-specific package (e.g., @resume-helper/darwin-arm64)
- * 2. Copy/link the binary to the expected location
+ * This script verifies that the correct platform-specific binary package
+ * was installed. It doesn't copy or symlink anything - the bin/resume-helper
+ * wrapper script handles finding and executing the binary at runtime.
  *
- * This follows the pattern used by esbuild, biome, and other native npm packages.
+ * This follows the pattern used by OpenCode, esbuild, and other native npm packages.
  */
 
-import {
-  existsSync,
-  copyFileSync,
-  chmodSync,
-  symlinkSync,
-  unlinkSync,
-  mkdirSync,
-} from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import fs from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import { createRequire } from "node:module";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const packageRoot = join(__dirname, "..");
+const require = createRequire(import.meta.url);
 
-// Map Node.js platform/arch to our binary names
+// Map Node.js platform/arch to our package naming convention
 const PLATFORM_MAP = {
-  "darwin-arm64": "darwin-arm64",
-  "darwin-x64": "darwin-x64",
-  "linux-x64": "linux-x64",
-  "linux-arm64": "linux-arm64",
-  "win32-x64": "windows-x64",
+  darwin: "darwin",
+  linux: "linux",
+  win32: "windows",
 };
 
-function getPlatformKey() {
-  return `${process.platform}-${process.arch}`;
+const ARCH_MAP = {
+  x64: "x64",
+  arm64: "arm64",
+  arm: "arm",
+};
+
+function getPlatformPackageName() {
+  const platform = PLATFORM_MAP[os.platform()] || os.platform();
+  const arch = ARCH_MAP[os.arch()] || os.arch();
+  return `resume-helper-${platform}-${arch}`;
 }
 
-function getBinaryName(platformKey) {
-  const platform = PLATFORM_MAP[platformKey];
-  if (!platform) {
-    return null;
-  }
-  const ext = process.platform === "win32" ? ".exe" : "";
-  return `resume-cli-${platform}${ext}`;
+function getBinaryName() {
+  return os.platform() === "win32" ? "resume-helper.exe" : "resume-helper";
 }
 
 function findBinary() {
-  const platformKey = getPlatformKey();
-  const binaryName = getBinaryName(platformKey);
+  const packageName = getPlatformPackageName();
+  const binaryName = getBinaryName();
 
-  if (!binaryName) {
-    console.error(
-      `Unsupported platform: ${platformKey}. ` +
-        `Supported platforms: ${Object.keys(PLATFORM_MAP).join(", ")}`,
+  try {
+    // Try to resolve the platform package
+    const packageJsonPath = require.resolve(`${packageName}/package.json`);
+    const binaryPath = path.join(
+      path.dirname(packageJsonPath),
+      "bin",
+      binaryName,
     );
-    process.exit(1);
-  }
 
-  // Strategy 1: Look in optionalDependencies package
-  // e.g., node_modules/@resume-helper/darwin-arm64/bin/resume-cli
-  const platform = PLATFORM_MAP[platformKey];
-  const optionalPkgBinary = join(
-    packageRoot,
-    "..",
-    `@resume-helper`,
-    platform,
-    "bin",
-    binaryName,
-  );
-
-  if (existsSync(optionalPkgBinary)) {
-    return optionalPkgBinary;
-  }
-
-  // Strategy 2: Look in dist/bin (development or bundled distribution)
-  const distBinary = join(packageRoot, "dist", "bin", binaryName);
-  if (existsSync(distBinary)) {
-    return distBinary;
-  }
-
-  // Strategy 3: Look in bin directory (pre-built distribution)
-  const binBinary = join(packageRoot, "bin", binaryName);
-  if (existsSync(binBinary)) {
-    return binBinary;
+    if (fs.existsSync(binaryPath)) {
+      return { binaryPath, packageName };
+    }
+  } catch {
+    // Package not found - this is expected if optionalDependencies wasn't installed
   }
 
   return null;
 }
 
-function setupBinary() {
-  const binaryPath = findBinary();
-
-  if (!binaryPath) {
-    // Not an error in CI or when using source install
-    if (process.env.CI || process.env.npm_config_ignore_scripts) {
-      console.log(
-        "resume-helper: Binary not found, likely source install or CI environment",
-      );
-      return;
-    }
-
-    console.error(
-      "resume-helper: Could not find pre-built binary for your platform.\n" +
-        "You may need to build from source: bun run scripts/build.ts --current\n" +
-        `Platform: ${getPlatformKey()}`,
+async function main() {
+  // Skip postinstall in CI environments or during npm publish
+  if (
+    process.env.CI ||
+    process.env.npm_config_ignore_scripts ||
+    process.env.npm_command === "publish"
+  ) {
+    console.log(
+      "resume-helper: Skipping binary verification (CI/publish environment)",
     );
-    process.exit(1);
+    return;
   }
 
-  // Ensure bin directory exists
-  const binDir = join(packageRoot, "bin");
-  if (!existsSync(binDir)) {
-    mkdirSync(binDir, { recursive: true });
-  }
+  const result = findBinary();
 
-  // Target location for the binary
-  const ext = process.platform === "win32" ? ".exe" : "";
-  const targetPath = join(binDir, `resume-cli${ext}`);
-
-  // Remove existing binary/symlink if it exists
-  if (existsSync(targetPath)) {
-    try {
-      unlinkSync(targetPath);
-    } catch {
-      // Ignore errors
-    }
-  }
-
-  try {
-    // Try to create a symlink first (saves disk space)
-    if (process.platform !== "win32") {
-      symlinkSync(binaryPath, targetPath);
-    } else {
-      // Windows: just copy the binary
-      copyFileSync(binaryPath, targetPath);
-    }
-
-    // Ensure executable permissions
-    chmodSync(targetPath, 0o755);
-
-    console.log(`resume-helper: Binary installed successfully`);
-  } catch (error) {
-    // Fall back to copying if symlink fails
-    try {
-      copyFileSync(binaryPath, targetPath);
-      chmodSync(targetPath, 0o755);
-      console.log(`resume-helper: Binary installed successfully (copied)`);
-    } catch (copyError) {
-      console.error(
-        `resume-helper: Failed to install binary: ${copyError.message}`,
-      );
-      process.exit(1);
-    }
+  if (result) {
+    console.log(`resume-helper: Platform binary verified (${result.packageName})`);
+  } else {
+    const packageName = getPlatformPackageName();
+    // Not a hard error - the binary might be installed via other means
+    // or the user might be building from source
+    console.log(
+      `resume-helper: Platform package ${packageName} not found.\n` +
+        `This is expected if you're building from source or on an unsupported platform.\n` +
+        `Run 'bun run scripts/build.ts --current' to build the binary locally.`,
+    );
   }
 }
 
-// Only run if this is the main module
-if (import.meta.url === `file://${process.argv[1]}`) {
-  setupBinary();
-}
-
-export { findBinary, setupBinary, getPlatformKey, getBinaryName };
+main().catch((error) => {
+  // Don't fail the install on postinstall errors
+  console.error(`resume-helper: Postinstall warning: ${error.message}`);
+});
