@@ -1,6 +1,6 @@
 {
   "name": "resume-helper",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "CLI tool to generate resumes from git commits, GitHub PRs, and Slack messages",
   "license": "MIT",
   "author": "Alexis Lucas",
@@ -44,11 +44,11 @@
     "check": "bun run lint && bun run format:check && bun run type-check"
   },
   "optionalDependencies": {
-    "resume-helper-darwin-arm64": "0.1.0",
-    "resume-helper-darwin-x64": "0.1.0",
-    "resume-helper-linux-x64": "0.1.0",
-    "resume-helper-linux-arm64": "0.1.0",
-    "resume-helper-windows-x64": "0.1.0"
+    "resume-helper-darwin-arm64": "0.1.3",
+    "resume-helper-darwin-x64": "0.1.3",
+    "resume-helper-linux-x64": "0.1.3",
+    "resume-helper-linux-arm64": "0.1.3",
+    "resume-helper-windows-x64": "0.1.3"
   },
   "devDependencies": {
     "@types/bun": "latest",
