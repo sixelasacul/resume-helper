@@ -100,19 +100,6 @@ This approach:
 - Leverages Slack AI's access to your conversations
 - Extracts project discussions, cross-team collaboration, leadership moments, and impact statements
 
-### Test Configuration
-
-```bash
-# Test all services
-bun run dev test
-
-# Test specific services
-bun run dev test git
-bun run dev test github
-bun run dev test slack
-bun run dev test ai
-```
-
 ### Manage Configuration
 
 ```bash
@@ -130,17 +117,7 @@ bun run dev config --set-slack-token <token>
 
 ## Configuration
 
-The CLI stores configuration in `.resume-cli.json` in your current directory. You can also use environment variables:
-
-```bash
-# Copy example environment file
-cp .env.example .env
-
-# Edit with your tokens
-GITHUB_TOKEN=your_github_token
-SLACK_TOKEN=xoxp-your_slack_user_token
-OPENAI_API_KEY=your_openai_key
-```
+The CLI stores configuration in `.resume-cli.json` in your current directory.
 
 ### Advanced Configuration
 
@@ -235,6 +212,16 @@ This is a proof-of-concept CLI tool. Feel free to:
 2. Create feature branches
 3. Submit pull requests
 4. Report issues
+
+## Release process
+
+The CLI is not automatically released when commits are pushed on the main branch. You have to:
+
+1. Update the `package.json` version, like `vX.Y.Z`;
+2. Create a commit with a message: `git commit -am "release vX.Y.Z"`;
+3. Create a tag containing the corresponding version: `git tag vX.Y.Z`;
+4. Push the commit: `git push origin main --tags`;
+5. Then the release workflow will kick off.
 
 ## License
 
