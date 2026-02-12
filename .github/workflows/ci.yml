@@ -52,5 +52,5 @@ jobs:
 
       - name: Test binary
         run: |
-          ./dist/bin/resume-cli-linux-x64 --version
-          ./dist/bin/resume-cli-linux-x64 --help
+          ./dist/resume-helper-linux-x64/bin/resume-helper --version
+          ./dist/resume-helper-linux-x64/bin/resume-helper --help
